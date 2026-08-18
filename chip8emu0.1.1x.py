@@ -26,7 +26,8 @@ WINDOW_W, WINDOW_H = 600, 400
 DISPLAY_W, DISPLAY_H = 64, 32
 SCALE = 8
 VIEW_W, VIEW_H = DISPLAY_W * SCALE, DISPLAY_H * SCALE
-TOP_BAR_H = 26
+TOP_BAR_H = 28
+STATUS_H = 34
 
 BG = (14, 20, 28)
 PANEL = (22, 32, 45)
@@ -57,14 +58,16 @@ FONTSET = bytes([
 # written to disk.
 
 # Two-player Pong: Q/A moves the left paddle, E/D moves the right paddle.
+# Jump targets: 0x220 skips only the bounce (not paddle input); 0x25E/0x262
+# use SNE so the ball resets on the left/right edge instead of every frame.
 PONG_ROM = bytes.fromhex("""
     00 e0 60 02 61 0c 62 3d 63 0c 64 20 65 10 66 01
     67 01 00 e0 a2 7c d0 15 d2 35 a2 81 d4 51 4f 00
-    12 4e 68 00 86 87 69 04 e9 9e 12 30 31 00 71 ff
+    12 26 68 00 86 87 69 04 e9 9e 12 30 31 00 71 ff
     69 07 e9 9e 12 3a 31 1b 71 01 69 06 e9 9e 12 44
     33 00 73 ff 69 09 e9 9e 12 4e 33 1b 73 01 84 64
-    85 74 35 00 12 58 67 01 35 1f 12 5e 67 ff 34 00
-    12 68 34 3f 12 68 12 70 64 20 65 10 66 01 67 01
+    85 74 35 00 12 58 67 01 35 1f 12 5e 67 ff 44 00
+    12 68 44 3f 12 68 12 70 64 20 65 10 66 01 67 01
     6a 02 fa 15 fa 07 3a 00 12 74 12 12 80 80 80 80
     80 80
 """)
@@ -277,6 +280,9 @@ class Chip8:
         if self.sound > 0:
             self.sound -= 1
 
+    def _skip(self):
+        self.pc = (self.pc + 2) & 0xFFF
+
     def cycle(self):
         if self.wait_reg is not None:
             return
@@ -293,7 +299,7 @@ class Chip8:
             self.display = [0] * (DISPLAY_W * DISPLAY_H)
         elif op == 0x00EE:
             if self.stack:
-                self.pc = self.stack.pop()
+                self.pc = self.stack.pop() & 0xFFF
         elif op & 0xF000 == 0x1000:
             self.pc = nnn
         elif op & 0xF000 == 0x2000:
@@ -301,13 +307,13 @@ class Chip8:
             self.pc = nnn
         elif op & 0xF000 == 0x3000:
             if self.V[x] == nn:
-                self.pc += 2
+                self._skip()
         elif op & 0xF000 == 0x4000:
             if self.V[x] != nn:
-                self.pc += 2
+                self._skip()
         elif op & 0xF00F == 0x5000:
             if self.V[x] == self.V[y]:
-                self.pc += 2
+                self._skip()
         elif op & 0xF000 == 0x6000:
             self.V[x] = nn
         elif op & 0xF000 == 0x7000:
@@ -322,23 +328,27 @@ class Chip8:
             self.V[x] ^= self.V[y]
         elif op & 0xF00F == 0x8004:
             s = self.V[x] + self.V[y]
-            self.V[0xF] = 1 if s > 255 else 0
             self.V[x] = s & 0xFF
+            self.V[0xF] = 1 if s > 255 else 0
         elif op & 0xF00F == 0x8005:
-            self.V[0xF] = 1 if self.V[x] >= self.V[y] else 0
+            flag = 1 if self.V[x] >= self.V[y] else 0
             self.V[x] = (self.V[x] - self.V[y]) & 0xFF
+            self.V[0xF] = flag
         elif op & 0xF00F == 0x8006:
-            self.V[0xF] = self.V[x] & 1
+            flag = self.V[x] & 1
             self.V[x] >>= 1
+            self.V[0xF] = flag
         elif op & 0xF00F == 0x8007:
-            self.V[0xF] = 1 if self.V[y] >= self.V[x] else 0
+            flag = 1 if self.V[y] >= self.V[x] else 0
             self.V[x] = (self.V[y] - self.V[x]) & 0xFF
+            self.V[0xF] = flag
         elif op & 0xF00F == 0x800E:
-            self.V[0xF] = (self.V[x] >> 7) & 1
+            flag = (self.V[x] >> 7) & 1
             self.V[x] = (self.V[x] << 1) & 0xFF
+            self.V[0xF] = flag
         elif op & 0xF00F == 0x9000:
             if self.V[x] != self.V[y]:
-                self.pc += 2
+                self._skip()
         elif op & 0xF000 == 0xA000:
             self.I = nnn
         elif op & 0xF000 == 0xB000:
@@ -350,21 +360,26 @@ class Chip8:
             vy = self.V[y] % DISPLAY_H
             self.V[0xF] = 0
             for row in range(n):
+                py = vy + row
+                if py >= DISPLAY_H:
+                    break
                 sprite = self.memory[(self.I + row) & 0xFFF]
                 for bit in range(8):
-                    if sprite & (0x80 >> bit):
-                        px = (vx + bit) % DISPLAY_W
-                        py = (vy + row) % DISPLAY_H
-                        idx = py * DISPLAY_W + px
-                        if self.display[idx]:
-                            self.V[0xF] = 1
-                        self.display[idx] ^= 1
+                    if not (sprite & (0x80 >> bit)):
+                        continue
+                    px = vx + bit
+                    if px >= DISPLAY_W:
+                        continue
+                    idx = py * DISPLAY_W + px
+                    if self.display[idx]:
+                        self.V[0xF] = 1
+                    self.display[idx] ^= 1
         elif op & 0xF0FF == 0xE09E:
             if self.keys[self.V[x] & 0xF]:
-                self.pc += 2
+                self._skip()
         elif op & 0xF0FF == 0xE0A1:
             if not self.keys[self.V[x] & 0xF]:
-                self.pc += 2
+                self._skip()
         elif op & 0xF0FF == 0xF007:
             self.V[x] = self.delay
         elif op & 0xF0FF == 0xF00A:
@@ -379,15 +394,16 @@ class Chip8:
             self.I = 0x50 + (self.V[x] & 0xF) * 5
         elif op & 0xF0FF == 0xF033:
             v = self.V[x]
-            self.memory[self.I] = v // 100
-            self.memory[self.I + 1] = (v // 10) % 10
-            self.memory[self.I + 2] = v % 10
+            addr = self.I & 0xFFF
+            self.memory[addr] = v // 100
+            self.memory[(addr + 1) & 0xFFF] = (v // 10) % 10
+            self.memory[(addr + 2) & 0xFFF] = v % 10
         elif op & 0xF0FF == 0xF055:
             for i in range(x + 1):
-                self.memory[self.I + i] = self.V[i]
+                self.memory[(self.I + i) & 0xFFF] = self.V[i]
         elif op & 0xF0FF == 0xF065:
             for i in range(x + 1):
-                self.V[i] = self.memory[self.I + i]
+                self.V[i] = self.memory[(self.I + i) & 0xFFF]
 
 class MenuItem:
     def __init__(self, text, action=None, submenu=None):
@@ -401,9 +417,9 @@ class App:
         pygame.display.set_caption(APP_NAME)
         self.screen = pygame.display.set_mode((WINDOW_W, WINDOW_H))
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 18)
-        self.small = pygame.font.Font(None, 16)
-        self.title_font = pygame.font.Font(None, 20)
+        self.font = pygame.font.SysFont("Arial", 16) or pygame.font.Font(None, 18)
+        self.small = pygame.font.SysFont("Arial", 14) or pygame.font.Font(None, 16)
+        self.title_font = pygame.font.SysFont("Arial", 18) or pygame.font.Font(None, 20)
         self.chip = Chip8()
         self.running = True
         self.paused = True
@@ -416,6 +432,7 @@ class App:
         self.active_menu = None
         self.menu_rects = {}
         self.drop_rects = []
+        self.drop_panel = None
         self.status = "Ready — File > Load ROM, Ctrl+O, or drop a .ch8 file"
         self.rom_dir = os.path.dirname(os.path.abspath(__file__))
         self.make_menus()
@@ -582,37 +599,42 @@ class App:
 
     def draw_menu(self):
         pygame.draw.rect(self.screen, MENU, (0, 0, WINDOW_W, TOP_BAR_H))
+        pygame.draw.line(self.screen, BORDER, (0, TOP_BAR_H - 1), (WINDOW_W, TOP_BAR_H - 1))
         x = 8
         self.menu_rects = {}
+        label_y = max(0, (TOP_BAR_H - self.font.get_height()) // 2)
         for name, items in self.menus:
-            w = self.font.size(name)[0] + 18
+            w = self.font.size(name)[0] + 22
             rect = pygame.Rect(x, 0, w, TOP_BAR_H)
             if self.active_menu == name:
                 pygame.draw.rect(self.screen, MENU_HOVER, rect)
-            self.draw_text(name, x + 9, 6)
+            self.draw_text(name, x + 10, label_y)
             self.menu_rects[name] = rect
             x += w
 
         self.drop_rects = []
+        self.drop_panel = None
         if self.active_menu:
             items = dict(self.menus)[self.active_menu]
             base = self.menu_rects[self.active_menu]
-            width = max(self.font.size(i.text)[0] for i in items) + 30
-            height = len(items) * 24 + 4
+            width = max(self.font.size(i.text)[0] for i in items) + 36
+            height = len(items) * 24 + 6
             panel = pygame.Rect(base.x, TOP_BAR_H, width, height)
             pygame.draw.rect(self.screen, (44, 48, 54), panel)
             pygame.draw.rect(self.screen, BORDER, panel, 1)
+            self.drop_panel = panel
             for idx, item in enumerate(items):
-                rect = pygame.Rect(panel.x + 2, panel.y + 2 + idx*24, width - 4, 24)
+                rect = pygame.Rect(panel.x + 2, panel.y + 3 + idx * 24, width - 4, 24)
                 mouse = pygame.mouse.get_pos()
                 if rect.collidepoint(mouse):
                     pygame.draw.rect(self.screen, MENU_HOVER, rect)
-                self.draw_text(item.text, rect.x + 8, rect.y + 5)
+                self.draw_text(item.text, rect.x + 8, rect.y + 4)
                 self.drop_rects.append((rect, item))
 
     def draw_chip8(self):
         x0 = (WINDOW_W - VIEW_W) // 2
-        y0 = TOP_BAR_H + 28
+        avail = WINDOW_H - TOP_BAR_H - STATUS_H
+        y0 = TOP_BAR_H + max(6, (avail - VIEW_H) // 2)
         pygame.draw.rect(self.screen, BORDER, (x0-2, y0-2, VIEW_W+4, VIEW_H+4), 2)
         pygame.draw.rect(self.screen, PIXEL_OFF, (x0, y0, VIEW_W, VIEW_H))
         for y in range(DISPLAY_H):
@@ -625,8 +647,8 @@ class App:
                     )
 
     def draw_status(self):
-        y = WINDOW_H - 34
-        pygame.draw.rect(self.screen, PANEL, (0, y, WINDOW_W, 34))
+        y = WINDOW_H - STATUS_H
+        pygame.draw.rect(self.screen, PANEL, (0, y, WINDOW_W, STATUS_H))
         self.draw_text(self.current_rom_name, 10, y + 5, CYAN, self.small)
         state = "PAUSED" if self.paused else "RUNNING"
         self.draw_text(f"{state}  |  {self.status}", 10, y + 19, TEXT, self.small)
@@ -637,10 +659,15 @@ class App:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.active_menu = None
-            elif event.key == pygame.K_o and (event.mod & pygame.KMOD_CTRL):
+                return
+            if event.key == pygame.K_o and (event.mod & pygame.KMOD_CTRL):
+                self.active_menu = None
                 self.load_external()
-            elif event.key in CATALOG_FKEYS:
+                return
+            if event.key in CATALOG_FKEYS:
+                self.active_menu = None
                 self.load_builtin(CATALOG_FKEYS[event.key])
+                return
             if event.key in KEYMAP:
                 self.chip.key_down(KEYMAP[event.key])
         elif event.type == pygame.KEYUP:
@@ -656,6 +683,8 @@ class App:
                         if item.action:
                             item.action()
                         return
+                if self.drop_panel and self.drop_panel.collidepoint(event.pos):
+                    return
             hit = self.menu_hit(event.pos)
             if hit:
                 self.active_menu = None if self.active_menu == hit else hit
@@ -688,9 +717,9 @@ class App:
             self.emulate(dt)
 
             self.screen.fill(BG)
-            self.draw_menu()
             self.draw_chip8()
             self.draw_status()
+            self.draw_menu()
             pygame.display.flip()
 
         pygame.quit()
