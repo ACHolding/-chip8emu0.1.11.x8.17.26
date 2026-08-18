@@ -7,7 +7,7 @@ Python CHIP-8 emulator. Built-in ROMs are listed in **Built-in ROMs**.
 | ROM | Shortcut | Controls |
 | --- | --- | --- |
 | Pong | F2 | Q/A left paddle, E/D right paddle |
-| Tetris | F3 | Q/E move, S fast drop |
+| Tetris | F3 | Q/E move, W rotate, S drop |
 
 Run:
 

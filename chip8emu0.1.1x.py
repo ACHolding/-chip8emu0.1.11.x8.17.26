@@ -69,24 +69,60 @@ PONG_ROM = bytes.fromhex("""
     80 80
 """)
 
-# Mini Tetris-style block stacker: Q/E moves, S enables fast drop.  Eight
-# two-row piece shapes are generated from the sprite table at the end.
+# Original tetromino Tetris (I/O/T/S/Z/J/L): Q/E move, W rotate, S drop.
+# 10x20 well with gravity, rotation, and line clears. CHIP-8 homebrew.
 TETRIS_ROM = bytes.fromhex("""
-    00 e0 12 04 a2 80 c6 07 86 6e f6 1e c0 1f 70 10
-    61 00 d0 12 3f 00 12 70 12 1a 65 08 63 08 e3 9e
-    12 24 65 01 f5 15 f5 07 35 00 12 26 12 2e d0 12
-    84 00 63 04 e3 9e 12 3c 30 00 70 ff 63 06 e3 9e
-    12 46 30 3c 70 01 d0 12 3f 00 12 4e 12 54 d0 12
-    80 40 d0 12 d0 12 41 1e 12 6c 71 01 d0 12 3f 00
-    12 64 12 1a d0 12 71 ff d0 12 12 04 d0 12 12 04
-    65 3c f5 15 f5 07 35 00 12 74 12 7c 00 e0 12 04
-    c0 c0 c0 60 60 c0 e0 40 80 e0 20 e0 f0 00 a0 a0
+    00 e0 24 00 12 06 c4 07 34 07 12 0e 12 06 65 00
+    62 17 63 05 23 14 4f 01 12 20 67 0c f7 15 12 26
+    00 e0 f0 0a 12 00 60 04 e0 9e 12 3c a4 f8 f0 65
+    40 00 22 94 60 01 a4 f8 f0 55 12 42 60 00 a4 f8
+    f0 55 60 06 e0 9e 12 58 a4 f9 f0 65 40 00 22 9c
+    60 01 a4 f9 f0 55 12 5e 60 00 a4 f9 f0 55 60 05
+    e0 9e 12 74 a4 fa f0 65 40 00 22 d2 60 01 a4 fa
+    f0 55 12 7a 60 00 a4 fa f0 55 f0 07 30 00 12 26
+    22 a4 3e 01 12 88 12 ee 67 0c 60 08 e0 a1 67 01
+    f7 15 12 26 68 ff 69 00 22 ae 00 ee 68 01 69 00
+    22 ae 00 ee 68 00 69 01 6e 00 22 ae 00 ee 6e 00
+    23 14 82 84 83 94 23 14 4f 01 12 be 00 ee 23 14
+    80 20 80 85 82 00 80 30 80 95 83 00 23 14 6e 01
+    00 ee 8a 50 23 14 75 01 35 04 12 de 65 00 23 14
+    4f 01 12 e6 00 ee 23 14 85 a0 23 14 00 ee 23 3a
+    23 78 3e 00 12 f8 12 06 23 d0 12 06 80 40 80 0e
+    80 0e 80 0e 80 0e 81 50 81 0e 81 0e 80 14 a4 4a
+    f0 1e 00 ee 22 fc d2 34 00 ee 38 00 13 20 00 ee
+    80 60 80 06 81 f0 86 00 87 06 31 00 13 32 60 80
+    87 01 78 ff 38 00 13 20 00 ee 6b 00 22 fc fb 1e
+    f0 65 86 00 67 00 88 20 60 14 88 05 23 1a 80 30
+    61 05 80 15 80 b4 61 14 81 05 3f 01 13 70 80 0e
+    a4 d0 f0 1e 8d 60 8c 70 f1 65 80 d1 81 c1 f1 55
+    7b 01 3b 04 13 3c 00 ee 6e 00 69 00 39 14 13 82
+    00 ee 80 90 80 0e a4 d0 f0 1e f1 65 30 ff 13 a0
+    82 10 63 c0 82 32 32 c0 13 a0 23 a4 7e 01 13 7c
+    79 01 13 7c 88 90 38 00 13 ac 13 c6 80 80 70 ff
+    80 0e a4 d0 f0 1e f1 65 82 80 82 0e a4 d0 f2 1e
+    f1 55 78 ff 13 a6 60 00 61 00 a4 d0 f1 55 00 ee
+    00 e0 24 16 23 d8 00 ee 63 05 6c 00 80 c0 80 0e
+    a4 d0 f0 1e f1 65 a4 fb f1 55 62 14 a4 fb d2 31
+    62 1c a4 fc d2 31 73 01 7c 01 3c 14 13 dc 00 ee
+    6e 2d a4 d0 60 00 f0 55 60 01 f0 1e 7e ff 3e 00
+    14 04 24 16 00 ee 62 13 63 05 a4 ba d2 3f 63 14
+    60 0f a4 ba f0 1e d2 35 62 1e 63 05 a4 ba d2 3f
+    63 14 60 0f a4 ba f0 1e d2 35 62 13 63 19 a4 ce
+    d2 31 62 1b a4 cf d2 31 00 ee 00 f0 00 00 40 40
+    40 40 00 f0 00 00 40 40 40 40 60 60 00 00 60 60
+    00 00 60 60 00 00 60 60 00 00 e0 40 00 00 40 c0
+    40 00 40 e0 00 00 40 60 40 00 60 c0 00 00 40 60
+    20 00 60 c0 00 00 40 60 20 00 c0 60 00 00 20 60
+    40 00 c0 60 00 00 20 60 40 00 80 e0 00 00 60 40
+    40 00 e0 20 00 00 40 40 c0 00 20 e0 00 00 40 40
+    60 00 e0 80 00 00 c0 40 40 00 80 80 80 80 80 80
+    80 80 80 80 80 80 80 80 80 80 80 80 80 80 ff f0
 """)
 
 # Visible Built-in ROMs catalog. The menu strip is generated from this list.
 ROM_CATALOG = [
     ("Pong", PONG_ROM, "F2", "Q/A left paddle, E/D right paddle"),
-    ("Tetris", TETRIS_ROM, "F3", "Q/E move, S fast drop"),
+    ("Tetris", TETRIS_ROM, "F3", "Q/E move, W rotate, S drop"),
 ]
 
 BUILTINS = {name: data for name, data, _shortcut, _controls in ROM_CATALOG}
